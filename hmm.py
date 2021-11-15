@@ -107,14 +107,16 @@ class HiddenMarkovModel(nn.Module):
         See the "Parametrization" section of the reading handout."""
 
         # See the reading handout section "Parametrization.""
-
-        ThetaB = 0.01*torch.rand(self.k, self.d)    
+        
+        ThetaB = 0.01*torch.rand(self.k, self.d)
+        #ThetaB = torch.Tensor([[0.8,0.1,0.5],[0.1,0.8,0.5],[0.1,0.1,0]])
         self._ThetaB = Parameter(ThetaB)    # params used to construct emission matrix
 
         WA = 0.01*torch.rand(1 if self.unigram # just one row if unigram model
                              else self.k,      # but one row per tag s if bigram model
                              self.k)           # one column per tag t
         WA[:, self.bos_t] = -inf               # correct the BOS_TAG column
+        #WA = torch.Tensor([[0.7,0.1,0],[0.2,0.2,0],[0.1,0.7,0]])
         self._WA = Parameter(WA)            # params used to construct transition matrix
 
 
@@ -195,8 +197,34 @@ class HiddenMarkovModel(nn.Module):
         # step.  But to better match the notation in the handout, we'll instead preallocate
         # a list of length n+2 so that we can assign directly to alpha[j].
         alpha = [torch.empty(self.k) for _ in sent]  
+      
+        #print(len(alpha))
+        #print("printed alpha length")
+        alpha[0] = torch.zeros(self.k)
+        alpha[0][self.bos_t] = 1
+     
+        count = 0
+        for word in sent:
+            #print(word)
+            if count != 0:
+                #print(self.B)
+                #print(alpha)
+                previous = alpha[count - 1]
+                #print("previous:")
+                #print(previous)
+                output = torch.multiply(torch.matmul(previous, self.A), self.B[:, word[0] - 1])
+                #print("output:")
+                #print(output)
+                alpha[count] = output
+            count += 1
 
-        raise NotImplementedError   # you fill this in!
+        #print(alpha[-1])
+        #adfadfa
+        
+        #Z = alpha[-1][self.eos_t]
+        Z = alpha[-1].max()
+        return Z.log()
+
 
     def viterbi_tagging(self, sentence: Sentence, corpus: TaggedCorpus) -> Sentence:
         """Find the most probable tagging for the given sentence, according to the
@@ -205,10 +233,38 @@ class HiddenMarkovModel(nn.Module):
         # Note: This code is mainly copied from the forward algorithm.
         # We just switch to using max, and follow backpointers.
         # I've continued to call the vector alpha rather than mu.
+        #TWord = Tuple[Word, Optional[Tag]]   # a (word, tag) pair where the tag might be None
+        #Sentence = List[TWord]
+       # print(sentence)
+       # adfadf
+        #adfadfa
+        most_prob = []
 
         sent = self._integerize_sentence(sentence, corpus)
 
-        raise NotImplementedError   # you fill this in!
+        alpha = [torch.empty(self.k) for _ in sent]  
+        alpha[0] = torch.zeros(self.k)
+        alpha[0][self.bos_t] = 1
+        count = 0
+        for word in sent:
+            if count == 0:
+                #print("printing list")
+                #print(most_prob)
+           
+                most_prob.append((BOS_WORD, BOS_TAG))
+                count += 1
+            else:
+                alpha[count] = torch.multiply((alpha[count-1] * self.A), self.B[:, word[0] - 1])
+                best_tag = torch.argmax(alpha[count])
+                word = self.vocab[word[0] - 1]
+                predicted_tag = self.tagset[best_tag]
+                if count != len(sentence) - 1:
+                    most_prob.append((word, predicted_tag))
+                else:
+                    most_prob.append((EOS_WORD, EOS_TAG))
+                count += 1
+
+        return most_prob
 
     def train(self,
               corpus: TaggedCorpus,
