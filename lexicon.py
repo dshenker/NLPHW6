@@ -97,7 +97,15 @@ def log_counts_lexicon(corpus: TaggedCorpus) -> torch.Tensor:
     training data.  Thus, if this feature has weight 1.0 and is the only feature,
     then p(w | t) will be proportional to 1+count(t,w), just as in add-1 smoothing."""
 
-    raise NotImplementedError   # you fill this in!
+    p = torch.ones((len(corpus.vocab), len(corpus.tagset)))
+    for sentence in corpus:
+        if sentence != None:
+            for word in sentence:
+
+                p[corpus.vocab.index(word[0]),corpus.tagset.index(word[1])] += 1
+    p = p.log()
+
+    return p   # you fill this in!
 
 def affixes_lexicon(corpus: TaggedCorpus) -> torch.Tensor:
     """Return a feature matrix with as many rows as corpus.vocab, where each

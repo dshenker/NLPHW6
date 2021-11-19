@@ -109,14 +109,14 @@ class HiddenMarkovModel(nn.Module):
         # See the reading handout section "Parametrization.""
         
         ThetaB = 0.01*torch.rand(self.k, self.d)
-        #ThetaB = torch.Tensor([[0.8,0.1,0.5],[0.1,0.8,0.5],[0.1,0.1,0]])
+        
         self._ThetaB = Parameter(ThetaB)    # params used to construct emission matrix
 
         WA = 0.01*torch.rand(1 if self.unigram # just one row if unigram model
                              else self.k,      # but one row per tag s if bigram model
                              self.k)           # one column per tag t
         WA[:, self.bos_t] = -inf               # correct the BOS_TAG column
-        #WA = torch.Tensor([[0.7,0.1,0],[0.2,0.2,0],[0.1,0.7,0]])
+        
         self._WA = Parameter(WA)            # params used to construct transition matrix
 
 
@@ -190,40 +190,48 @@ class HiddenMarkovModel(nn.Module):
         The corpus from which this sentence was drawn is also passed in as an
         argument, to help with integerization and check that we're 
         integerizing correctly."""
-
+        #print(sentence)
+        kappa_vals = []
         sent = self._integerize_sentence(sentence, corpus)
-
+        
         # The "nice" way to construct alpha is by appending to a List[Tensor] at each
         # step.  But to better match the notation in the handout, we'll instead preallocate
         # a list of length n+2 so that we can assign directly to alpha[j].
         alpha = [torch.empty(self.k) for _ in sent]  
       
-        #print(len(alpha))
-        #print("printed alpha length")
         alpha[0] = torch.zeros(self.k)
         alpha[0][self.bos_t] = 1
      
         count = 0
         for word in sent:
-            #print(word)
-            if count != 0:
-                #print(self.B)
-                #print(alpha)
+            tag = word[1]
+            if ((count != 0) & (count != len(sent) - 1)):
+
                 previous = alpha[count - 1]
-                #print("previous:")
-                #print(previous)
-                output = torch.multiply(torch.matmul(previous, self.A), self.B[:, word[0] - 1])
-                #print("output:")
-                #print(output)
-                alpha[count] = output
+       
+                output = torch.multiply(torch.matmul(previous, self.A), self.B[:, word[0]])
+                kappa = torch.sum(output).item()
+                kappa_vals.append(kappa)
+
+                alpha[count] = output / kappa
+            if tag:
+                save = alpha[count][tag]
+                alpha[count] = torch.zeros(alpha[count].shape)
+                alpha[count][tag] = save
             count += 1
 
-        #print(alpha[-1])
-        #adfadfa
         
-        #Z = alpha[-1][self.eos_t]
-        Z = alpha[-1].max()
-        return Z.log()
+ 
+        final_b = torch.zeros(self.k)
+        final_b[self.eos_t] = 1
+        output = torch.multiply(torch.matmul(previous, self.A), final_b)
+        kappa = torch.sum(output).item()
+        alpha[-1] = output/kappa
+        kappa_vals.append(kappa)
+        kappa_vals = torch.FloatTensor(kappa_vals)
+   
+        Z = alpha[-1][self.eos_t].log() + torch.sum(torch.log(kappa_vals))
+        return Z
 
 
     def viterbi_tagging(self, sentence: Sentence, corpus: TaggedCorpus) -> Sentence:
@@ -239,31 +247,87 @@ class HiddenMarkovModel(nn.Module):
        # adfadf
         #adfadfa
         most_prob = []
-
+        
         sent = self._integerize_sentence(sentence, corpus)
 
         alpha = [torch.empty(self.k) for _ in sent]  
         alpha[0] = torch.zeros(self.k)
         alpha[0][self.bos_t] = 1
         count = 0
+        backpoint = [torch.empty(self.k) for _ in sent]
         for word in sent:
+            tag = word[1]
             if count == 0:
-                #print("printing list")
-                #print(most_prob)
-           
-                most_prob.append((BOS_WORD, BOS_TAG))
+                #most_prob.append((BOS_WORD, BOS_TAG))
+                count += 1
+            elif count != (len(sent) - 1):
+                #print(alpha[count - 1].shape)
+                #print(self.A.shape)
+                #print(self.B.shape)
+                ##print(alpha[count - 1])
+                #print(self.A)
+                #print(self.B[:,word[0]])
+                #print(alpha[count-1] * self.A.T)
+                #print(((alpha[count-1] * self.A.T).T * self.B[:,word[0]]))
+                #adfadfa
+                #print(self.B)
+                #adfadf
+                #alpha[count] = torch.multiply(torch.matmul(alpha[count-1],  self.A), self.B[:, word[0]])
+                all_pos = (alpha[count-1] * self.A.T).T * self.B[:,word[0]]
+                (max_vals, max_indices) = all_pos.max(dim = 0)
+                alpha[count] = max_vals
+                backpoint[count] = max_indices
+                #print(all_pos)
+
+                #alpha[count] = alpha[count-1] * self.A * self.B[:,word[0]].T
+                #best_tag = torch.argmax(alpha[count])
+                #word = self.vocab[word[0]]
+                #predicted_tag = self.tagset[best_tag]
+                #most_prob.append((word, predicted_tag))
+
+                if tag:
+                    save_prob = alpha[count][tag]
+                    save_tag = backpoint[count][tag]
+                    alpha[count] = torch.zeros(alpha[count].shape)
+                    alpha[count][tag] = save_prob
+                    backpoint[count] = torch.zeros(backpoint[count].shape)
+                    backpoint[count][tag] = save_tag
+            
                 count += 1
             else:
-                alpha[count] = torch.multiply((alpha[count-1] * self.A), self.B[:, word[0] - 1])
-                best_tag = torch.argmax(alpha[count])
-                word = self.vocab[word[0] - 1]
-                predicted_tag = self.tagset[best_tag]
-                if count != len(sentence) - 1:
-                    most_prob.append((word, predicted_tag))
-                else:
-                    most_prob.append((EOS_WORD, EOS_TAG))
-                count += 1
+                final_b = torch.zeros(self.k)
+                final_b[self.eos_t] = 1
+                all_pos = alpha[count-1] * self.A * final_b
+                #output = torch.multiply(torch.matmul(previous, self.A), final_b)
+                (max_vals, max_indices) = all_pos.max(dim = 0)
+                alpha[count] = max_vals
+                backpoint[count] = max_indices
+                #most_prob.append((EOS_WORD, EOS_TAG))
+        tag_list = []
+        tag_list.append(self.eos_t)
+        next_ind = self.eos_t
+        #print(backpoint)
+        for elem in backpoint[::-1][:-1]:
+            #print("printing")
+            #print(tag_list)
+            tag_list.append(elem[next_ind].item())
+            next_ind = elem[next_ind]
+        #print("PRINTING BEST")
+        #print(most_prob)
+        #print(tag_list)
+        tag_list = tag_list[::-1]
+        #print("printing tag list")
+        #print(tag_list)
+        tag_list = [self.tagset[i] for i in tag_list]
+        #print(tag_list)
+        spot = 0
+        #print("printing sentence")
+        #print(sent)
+        for word in sent:
+            most_prob.append((self.vocab[word[0]], tag_list[spot]))
+            spot += 1
 
+        #print(most_prob)
         return most_prob
 
     def train(self,

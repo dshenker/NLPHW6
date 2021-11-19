@@ -141,6 +141,8 @@ def main() -> None:
             raise NotImplementedError   # you fill this in!
         else:
             lexicon = build_lexicon(train, embeddings_file=Path(args.lexicon), log_counts=args.awesome)
+            #icsup = TaggedCorpus(Path("icsup"), add_oov=False)
+            #lexicon = build_lexicon(icsup, one_hot=True)
             model = HiddenMarkovModel(tagset, vocab, lexicon, unigram=args.unigram)
 
     dev = TaggedCorpus(Path(args.eval), tagset=tagset, vocab=vocab)
@@ -156,6 +158,8 @@ def main() -> None:
                     reg=args.reg,
                     save_path=args.save_path,
                     tolerance=args.tolerance)
+    print("evaluating")
+    model_error_rate(model, dev, vocab)
     tagger_write_output(model, dev, Path(args.eval+".output") if args.output_file is None else args.output_file)
 
 
