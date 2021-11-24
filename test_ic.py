@@ -1,5 +1,6 @@
 # This file illustrates how you might experiment with the HMM interface at the prompt.
 # You can also run it directly.
+
 import logging, math, os
 from pathlib import Path
 from typing import Callable
@@ -15,7 +16,6 @@ logging.basicConfig(format="%(levelname)s : %(message)s", level=logging.INFO)  #
 # torch.autograd.set_detect_anomaly(True)    # uncomment to improve error messages from .backward(), but slows down
 
 # Make an HMM with randomly initialized parameters.
-print(Path("icsup"))
 icsup = TaggedCorpus(Path("icsup"), add_oov=False)
 logging.info(f"Ice cream vocabulary: {list(icsup.vocab)}")
 logging.info(f"Ice cream tagset: {list(icsup.tagset)}")

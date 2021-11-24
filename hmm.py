@@ -190,7 +190,7 @@ class HiddenMarkovModel(nn.Module):
         The corpus from which this sentence was drawn is also passed in as an
         argument, to help with integerization and check that we're 
         integerizing correctly."""
-        #print(sentence)
+        
         kappa_vals = []
         sent = self._integerize_sentence(sentence, corpus)
         
@@ -209,7 +209,7 @@ class HiddenMarkovModel(nn.Module):
 
                 previous = alpha[count - 1]
        
-                output = torch.multiply(torch.matmul(previous, self.A), self.B[:, word[0]])
+                output = torch.mul(torch.matmul(previous, self.A), self.B[:, word[0]])
                 kappa = torch.sum(output).item()
                 kappa_vals.append(kappa)
 
@@ -224,12 +224,14 @@ class HiddenMarkovModel(nn.Module):
  
         final_b = torch.zeros(self.k)
         final_b[self.eos_t] = 1
-        output = torch.multiply(torch.matmul(previous, self.A), final_b)
+        output = torch.mul(torch.matmul(previous, self.A), final_b)
         kappa = torch.sum(output).item()
         alpha[-1] = output/kappa
         kappa_vals.append(kappa)
         kappa_vals = torch.FloatTensor(kappa_vals)
-   
+        print("NEW RUN--------------------------------")
+        print(alpha)
+        print("END RUN--------------------------------")
         Z = alpha[-1][self.eos_t].log() + torch.sum(torch.log(kappa_vals))
         return Z
 
@@ -243,9 +245,7 @@ class HiddenMarkovModel(nn.Module):
         # I've continued to call the vector alpha rather than mu.
         #TWord = Tuple[Word, Optional[Tag]]   # a (word, tag) pair where the tag might be None
         #Sentence = List[TWord]
-       # print(sentence)
-       # adfadf
-        #adfadfa
+       
         most_prob = []
         
         sent = self._integerize_sentence(sentence, corpus)
@@ -258,33 +258,16 @@ class HiddenMarkovModel(nn.Module):
         for word in sent:
             tag = word[1]
             if count == 0:
-                #most_prob.append((BOS_WORD, BOS_TAG))
                 count += 1
             elif count != (len(sent) - 1):
-                #print(alpha[count - 1].shape)
-                #print(self.A.shape)
-                #print(self.B.shape)
-                ##print(alpha[count - 1])
-                #print(self.A)
-                #print(self.B[:,word[0]])
-                #print(alpha[count-1] * self.A.T)
-                #print(((alpha[count-1] * self.A.T).T * self.B[:,word[0]]))
-                #adfadfa
-                #print(self.B)
-                #adfadf
-                #alpha[count] = torch.multiply(torch.matmul(alpha[count-1],  self.A), self.B[:, word[0]])
+                
                 all_pos = (alpha[count-1] * self.A.T).T * self.B[:,word[0]]
+                kappa = torch.sum(all_pos).item()
+                all_pos = all_pos / kappa
                 (max_vals, max_indices) = all_pos.max(dim = 0)
                 alpha[count] = max_vals
                 backpoint[count] = max_indices
-                #print(all_pos)
-
-                #alpha[count] = alpha[count-1] * self.A * self.B[:,word[0]].T
-                #best_tag = torch.argmax(alpha[count])
-                #word = self.vocab[word[0]]
-                #predicted_tag = self.tagset[best_tag]
-                #most_prob.append((word, predicted_tag))
-
+               
                 if tag:
                     save_prob = alpha[count][tag]
                     save_tag = backpoint[count][tag]
@@ -297,8 +280,15 @@ class HiddenMarkovModel(nn.Module):
             else:
                 final_b = torch.zeros(self.k)
                 final_b[self.eos_t] = 1
-                all_pos = alpha[count-1] * self.A * final_b
+                all_pos = (alpha[count-1] * self.A.T).T * final_b
+                kappa = torch.sum(all_pos).item()
+                all_pos = all_pos / kappa
+                #print(alpha[count-1])
+                #print(self.A)
+                #print(final_b)
                 #output = torch.multiply(torch.matmul(previous, self.A), final_b)
+                #print(all_pos)
+                #adfad
                 (max_vals, max_indices) = all_pos.max(dim = 0)
                 alpha[count] = max_vals
                 backpoint[count] = max_indices
@@ -306,28 +296,22 @@ class HiddenMarkovModel(nn.Module):
         tag_list = []
         tag_list.append(self.eos_t)
         next_ind = self.eos_t
-        #print(backpoint)
+ 
         for elem in backpoint[::-1][:-1]:
-            #print("printing")
-            #print(tag_list)
             tag_list.append(elem[next_ind].item())
             next_ind = elem[next_ind]
-        #print("PRINTING BEST")
-        #print(most_prob)
-        #print(tag_list)
+
         tag_list = tag_list[::-1]
-        #print("printing tag list")
-        #print(tag_list)
+
         tag_list = [self.tagset[i] for i in tag_list]
-        #print(tag_list)
+   
         spot = 0
-        #print("printing sentence")
-        #print(sent)
+
         for word in sent:
             most_prob.append((self.vocab[word[0]], tag_list[spot]))
             spot += 1
 
-        #print(most_prob)
+     
         return most_prob
 
     def train(self,
